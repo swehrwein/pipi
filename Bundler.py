@@ -1,6 +1,8 @@
 import itertools
 import numpy as np
 import sys
+#import magic
+import gzip
 
 
 class BundleFile(object):
@@ -8,8 +10,16 @@ class BundleFile(object):
     def __init__(self, filename, readCameras=True, readPoints=True, listFile=False):
         sys.stdout.write("Loading Bundle file... ")
         sys.stdout.flush()
-        f = open(filename,'r');
-        
+        #print magic.from_file(filename)
+        #mgc = magic.from_file(filename)
+
+        f = open(filename,'rb');
+
+        mgc = f.read(2)
+        if [ord(i) for i in mgc] == [31, 139]:
+            f.close()
+            f = gzip.open(filename,'rb')
+
         # Bundle file v0.x
         self.version_str = f.readline()
         

@@ -31,6 +31,8 @@ def imwrite(im, fn):
         skim.io.imsave(fn, im)
 
 def imshow(im, **kwargs):
+    if im.ndim == 3 and im.shape[2] == 2:
+        im = np.dstack((im[:,:,0], im[:,:,1], np.zeros(im.shape[:2])))
     skim.io.imshow(im, **kwargs)
     skim.io.show()
 

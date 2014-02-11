@@ -53,3 +53,8 @@ def azel2xyz(az, el):
     y = np.cos(el) * np.cos(az)
     z = np.sin(el)
     return np.array([x,y,z])
+
+def enu2azel(e,n,u):
+    az = (np.arctan2(e,n) + 2*np.pi) % (2*np.pi)
+    el = np.arctan2(u, np.sqrt(e**2 + n**2))
+    return az, el
