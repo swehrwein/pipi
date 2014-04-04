@@ -1,6 +1,32 @@
 import numpy as np
 import gzip
 
+
+def saveMat(arr, fn):
+    if arr.dtype == np.int32:
+        mattype = 'int'
+    elif arr.dtype == np.single:
+        mattype = 'float'
+    elif arr.dtype == np.double:
+        mattype = 'double'
+    else:
+        print "Unsupported array type %s" % str(arr.dtype)
+        return
+
+    while np.ndim(arr) < 3:
+        arr = np.reshape(arr, arr.shape + (np.newaxis,))
+    with gzip.open(fn, 'wb') as f:
+        rows, cols, channels = arr.shape
+        f.write('#vcam_mat_v1\n')
+        f.write(mattype + '\n')
+        f.write('%d %d %d\n' % (cols, rows, channels))
+
+        data = np.zeros(cols*rows*channels)
+        for i in range(channels):
+            data[i::channels] = arr[:,:,i].ravel()
+        f.write(data.tostring())
+
+
 def loadMat(fn):
     f = gzip.open(fn, 'rb')
     header = f.readline().strip()
@@ -19,7 +45,7 @@ def loadMat(fn):
         print "vcammat datatype unkonwn: %s" % mattype
         return np.array([])
 
-    (cols, rows, channels)= tuple(int(x) for x in f.readline().split())
+    (cols, rows, channels) = tuple(int(x) for x in f.readline().split())
     datastr = f.read()
     data = np.fromstring(datastr, dtype=dt)
     f.close()
@@ -31,4 +57,3 @@ def loadMat(fn):
 
     return data_shaped
     #return np.transpose(np.reshape(data, dims), [1, 0, 2])
-
