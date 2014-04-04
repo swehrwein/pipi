@@ -1,20 +1,22 @@
 import numpy as np
 import skimage as skim
 import skimage.io
-import skimage.color
+import matplotlib.pyplot as plt
 
 import sys
 import timeit
 import warnings
 
+
 def rgb2gray(a):
     #print a
     if a.ndim == 3:
         return skim.color.rgb2gray(a)
-    elif a.ndim == 1 and a.size ==3:
+    elif a.ndim == 1 and a.size == 3:
         return skim.color.rgb2gray(a[np.newaxis, np.newaxis, :])
     elif a.ndim == 2:
         return a
+
 
 def imread(f, gamma=1.0):
     if f[-3:] == 'exr':
@@ -23,6 +25,7 @@ def imread(f, gamma=1.0):
     else:
         return np.power(skim.img_as_float(skim.io.imread(f)), gamma)
 
+
 def imwrite(im, fn):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
@@ -30,11 +33,18 @@ def imwrite(im, fn):
             im = im.astype('float')
         skim.io.imsave(fn, im)
 
+
 def imshow(im, **kwargs):
     if im.ndim == 3 and im.shape[2] == 2:
         im = np.dstack((im[:,:,0], im[:,:,1], np.zeros(im.shape[:2])))
     skim.io.imshow(im, **kwargs)
     skim.io.show()
+
+
+def hist(data, *args, **kwargs):
+    plt.hist(data, *args)
+    plt.show()
+
 
 def div_nonz(a,b):
     anz = a[b != 0]
@@ -42,6 +52,7 @@ def div_nonz(a,b):
     result = np.zeros_like(a)
     result[b != 0] = anz / bnz
     return result
+
 
 def bilerp(im, r, c):
     r = np.asarray(r)
@@ -64,18 +75,23 @@ def bilerp(im, r, c):
 
     return wa*Ia + wb*Ib + wc*Ic + wd*Id
 
+
 def mmr(arr):
     return np.min(arr), np.max(arr), np.ptp(arr)
+
+
 def pmmr(arr):
     print '%f %f %f' % mmr(arr)
+
 
 class Opt(object):
     pass
 
+
 class Timer(object):
     def __init__(self, msg='', printout=True):
         self.msg = msg
-        self.printout=printout
+        self.printout = printout
 
     def __enter__(self):
         if self.printout:
@@ -90,4 +106,3 @@ class Timer(object):
         if self.printout:
             print '%.2f' % self.elapsed
             sys.stdout.flush()
-
