@@ -10,13 +10,13 @@ class Landmark(ephem.Observer):
         self.lon = str(lon)
         self.elevation = elevation
         self.timezone = timezone
-    
+
         # make utcoffset easy to access
         # (we assume no DST, so UTC offset is not date-dependent)
         dummy_dt = datetime.datetime(2010,1,1)
         utcoff = self.timezone.utcoffset(dummy_dt)
         self.utcoffset = int(round(utcoff.total_seconds() / 3600))
-    
+
     def get_angle(self, timestamp):
         # make the input timestamp aware, then convert to utc
         sun = ephem.Sun()
@@ -27,7 +27,7 @@ class Landmark(ephem.Observer):
     def get_angles(self, date):
         midnight_local = datetime.datetime(*date, tzinfo=self.timezone)
         minute = datetime.timedelta(minutes=1)
-        
+
         times = [midnight_local + minute*i for i in range(24*60)]
         angles = np.zeros((24*60, 2))
         sun = ephem.Sun()
@@ -48,11 +48,13 @@ class Landmark(ephem.Observer):
     #       self.date = noon_local.astimezone(pytz.utc)
     #       return self.next_setting(ephem.Sun())
 
-def azel2xyz(az, el):
+
+def azel2enu(az, el):
     x = np.cos(el) * np.sin(az)
     y = np.cos(el) * np.cos(az)
     z = np.sin(el)
     return np.array([x,y,z])
+
 
 def enu2azel(e,n,u):
     az = (np.arctan2(e,n) + 2*np.pi) % (2*np.pi)

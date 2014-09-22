@@ -1,6 +1,7 @@
 import numpy as np
 import skimage as skim
 import skimage.io
+import skimage.color
 import matplotlib.pyplot as plt
 
 import sys
@@ -18,30 +19,40 @@ def rgb2gray(a):
         return a
 
 
-def imread(f, gamma=1.0):
-    if f[-3:] == 'exr':
-        im = skim.io.imread(f, plugin='openexr')
+def gray2rgb(a):
+    return skimage.color.gray2rgb(a)
+
+
+def imread(fn, gamma=1.0):
+    if fn[-3:] == 'exr':
+        im = skim.io.imread(fn, plugin='openexr')
         return np.power(im / np.max(im), gamma)
     else:
-        return np.power(skim.img_as_float(skim.io.imread(f)), gamma)
+        return np.power(skim.img_as_float(skim.io.imread(fn)), gamma)
 
 
-def imwrite(im, fn):
+def imwrite(im, fn, dtype=np.float16):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         if im.dtype == bool:
             im = im.astype('float')
-        skim.io.imsave(fn, im)
+        if fn[-3:] == 'exr':
+            skim.io.imsave(fn, im.astype(dtype), plugin='openexr')
+        else:
+            skim.io.imsave(fn, im)
 
 
-def imshow(im, **kwargs):
+def imshow(im, colorbar=False, **kwargs):
     if im.ndim == 3 and im.shape[2] == 2:
         im = np.dstack((im[:,:,0], im[:,:,1], np.zeros(im.shape[:2])))
     skim.io.imshow(im, **kwargs)
+    plt.colorbar()
     skim.io.show()
 
 
 def hist(data, *args, **kwargs):
+    if data.ndim > 1:
+        data = np.reshape(data, (-1,))
     plt.hist(data, *args)
     plt.show()
 
@@ -82,6 +93,57 @@ def mmr(arr):
 
 def pmmr(arr):
     print '%f %f %f' % mmr(arr)
+
+
+def mldivide(A,B):
+    """
+    Solves Ax = B for x; equivalent to matlab's A\B
+    Conceptually similar to X = inv(A)*B
+    """
+    return np.linalg.lstsq(A,B)
+
+
+def mrdivide(A,B):
+    """
+    Solves xA = B for x; equivalent to matlab's B/A
+    Conceptually similar to X = B*inv(A)
+    """
+    X, residuals, rank, s = np.linalg.lstsq(A.T, B.T)
+    return (X.T, residuals, rank, s)
+
+
+def vec(a):
+    return np.reshape(a, (-1,))
+
+
+def unstuff(a, mask):
+    if a.ndim == 3:
+        return a[mask,:]
+    elif a.ndim == 2:
+        return a[mask]
+
+
+def stuff(a, mask):
+    if a.ndim == 1:
+        result = np.zeros(mask.shape)
+        result[mask] = a
+    elif a.ndim == 2:
+        result = np.zeros(mask.shape + (a.shape[1],))
+        result[mask,:] = a
+    return result
+
+
+def azel2enu(az, el):
+    e = np.cos(el) * np.sin(az)
+    n = np.cos(el) * np.cos(az)
+    u = np.sin(el)
+    return np.array([e,n,u])
+
+
+def enu2azel(e,n,u):
+    az = (np.arctan2(e,n) + 2*np.pi) % (2*np.pi)
+    el = np.arctan2(u, np.sqrt(e**2 + n**2))
+    return az, el
 
 
 class Opt(object):

@@ -14,7 +14,7 @@ def saveMat(arr, fn):
         return
 
     while np.ndim(arr) < 3:
-        arr = np.reshape(arr, arr.shape + (np.newaxis,))
+        arr = np.reshape(arr, arr.shape + (1,))
     with gzip.open(fn, 'wb') as f:
         rows, cols, channels = arr.shape
         f.write('#vcam_mat_v1\n')

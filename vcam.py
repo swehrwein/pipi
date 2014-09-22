@@ -1,12 +1,47 @@
 import util
 import vcammat
+import ply
 
 import OpenEXR
 import numpy as np
 
 import os
 import json
+import shutil
 from os.path import join, exists
+
+
+class Camera(object):
+    def __init__(self, dataset, image, mask, coords2d, im2d):
+        self.dataset = dataset
+        self.im3d = image
+        self.mask = mask
+        self.coords2d = coords2d
+        self.im2d = im2d
+
+    def to_2d(self, image, mask=None):
+        """ Use coords2d to project an image to into 2d. """
+        if mask is None:
+            mask = np.ones(image.shape[:2], dtype=bool)
+        if not self.dataset.is3d:  # this is a noop for 2d datasets
+            if image.ndim == 3:
+                return image * mask[:,:,np.newaxis]
+            elif image.ndim == 2:
+                return image * mask
+
+        # add a singleton third dimension for generality
+        if image.ndim == 2:
+            image = image[:,:,np.newaxis]
+
+        result = np.zeros(self.im2d.shape[:2] + (image.shape[2],))
+        h,w, = image.shape[:2]
+        for i in range(h):
+            for j in range(w):
+                if mask[i,j]:
+                    x, y = tuple(np.round(self.coords2d[i,j,:]))
+                    result[y,x,:] = image[i,j,:]
+
+        return np.squeeze(result)
 
 
 class Dataset(object):
@@ -18,6 +53,8 @@ class Dataset(object):
         self.pid_dir = join(self.data_dir, 'pids')
 
         self.results_dir = join(self.base_dir, 'results')
+        if not os.path.exists(self.results_dir):
+            os.mkdir(self.results_dir)
 
         # load image_info
         imginfo_fn = join(self.data_dir, 'image_info.json')
@@ -39,6 +76,7 @@ class Dataset(object):
         # get dimensions
         im3d, _, _, _ = self.load_rec(self.image_info[0])
         self.dims = im3d.shape
+        self.N = np.prod(self.dims[:2])
 
         self.normals, self.coords3d = self._load_normals_coords()
 
@@ -59,7 +97,7 @@ class Dataset(object):
             im3d_fn = join(self.data_dir, rec['filename'])
             im3d = util.imread(im3d_fn)
 
-            # assumes for now that 2d datasets no per-image masks
+            # assumes for now that 2d datasets have no per-image masks
             if self.global_mask is not None:
                 mask3d = self.global_mask
             else:
@@ -67,6 +105,28 @@ class Dataset(object):
             coords2d = None
             im2d = im3d
         return im3d, mask3d, coords2d, im2d
+
+    def get_rec(self, rec=None, index=None, pmvsid=None):
+        if rec is not None:
+            pass
+        elif index is not None:
+            rec = self.image_info[index]
+        elif pmvsid is not None:
+            rec = [rec for rec in self.image_info if rec['pmvsid'] == pmvsid][0]
+        return rec
+
+    def load_camera(self, rec=None, index=None, pmvsid=None):
+        """
+        Load and build a camera object from an image_info record,
+        image_info index, or pmvsid. One of rec, index, or pmvsid
+        must be provided, and the first provided argument
+        type is used.
+
+        Building by pmvsid is unpreferable because it
+        requires a linear search through image_info
+        """
+        rec = self.get_rec(rec, index, pmvsid)
+        return Camera(self, *(self.load_rec(rec)))
 
     def load_pid(self, i, j):
         """
@@ -78,6 +138,22 @@ class Dataset(object):
         data = vcammat.loadMat(join(self.pid_dir, '%04d/%04d.vcammat' % (i,j)))
         pid, valid = data[:,0], data[:,1] > 0
         return pid, valid
+
+    def save_result(self, img, path):
+        fn = join(self.results_dir, path)
+        directory = os.path.dirname(fn)
+        if not os.path.exists(directory):
+            os.mkdir(directory)
+        util.imwrite(img, fn)
+
+    def write_ply(self, fname, coords=None, normals=None, colors=None, mask=None):
+        coords = self.coords3d if coords is None else coords
+        normals = self.normals if normals is None else normals
+        colors = np.ones_like(coords) if colors is None else colors
+        ply.write(fname, coords, normals, colors, mask=mask)
+
+    def __str__(self):
+        return "<Dataset: " + self.name + ">"
 
     def _load_normals_coords(self):
         normals = None
@@ -140,7 +216,6 @@ def setup_dirs(dataset):
     return base_dir, data_dir, results_dir, image_info, is3d
 
 
-
 def load_from_rec(dataset, rec, is3d=True):
     # returns im3d, mask3d, coords2d, im2d
     base_dir = '/home/swehrwein/vcam/data/'
@@ -198,3 +273,17 @@ def imread_projpoints(filename):
         coords = np.dstack(coord_data)
 
     return img, valid > 0, coords
+
+
+def find_all_visible_points(ds):
+    for rec in ds.image_info:
+        if 'n_points' not in rec:
+            try:
+                cam = ds.load_camera(rec=rec)
+            except IOError:
+                continue
+            rec['n_points'] = np.sum(cam.mask)
+    ii_fn = join(ds.data_dir, 'image_info.json')
+    shutil.copyfile(ii_fn, ii_fn + '.bak')
+    with open(ii_fn,'w') as f:
+        json.dump(ds.image_info, f)
