@@ -1,6 +1,10 @@
+import util
+
+import os
 import cv2
 import numpy as np
 import scipy as sp
+
 
 def open_read(fn):
     """Open cv2.VideoCapture.
@@ -22,7 +26,6 @@ def open_write(fn, h, w):
     outvid = cv2.VideoWriter(fn, fourcc, 30, (w,h))
     assert(outvid.isOpened())
     return outvid
-
 
 
 def get_size(vr):
@@ -67,6 +70,12 @@ def save_video(filename, video):
     vw.release()
 
 
+def save_frames(filepattern, video):
+    for i in range(video.shape[-1]):
+        util.imwrite(video[...,i], filepattern % i)
+
+
+
 def resize(vid, scale):
     first = sp.misc.imresize(vid[...,0], scale)
 
@@ -76,9 +85,8 @@ def resize(vid, scale):
         out[...,i] = sp.misc.imresize(vid[...,i], scale)
     return out
 
-""" Good, except for a bug that makes the right few pixels go nuts.
+""" Good, except for a bug that makes the right few pixels go nuts."""
 import av
-import numpy as np
 
 
 class VideoReader(object):
@@ -121,33 +129,48 @@ class VideoWriter(object):
         assert(frame.shape[:2] == (self.stream.height, self.stream.width))
         avframe = av.VideoFrame.from_ndarray(np.ascontiguousarray(frame))
         packet = self.stream.encode(avframe)
-        self.outfile.mux(packet)
+        if packet:
+            self.outfile.mux(packet)
 
     def close(self):
         self.outfile.close()
 
 
-def test():
-    vr = VideoReader("/home/swehrwein/gpdata/samford/pyramid/samford_150828_080000.mkv")
+def test(infile, out_dir):
+    #base = "/home/swehrwein/gpdata/samford/"
+    #infile = base + "raw/150828_08_00.mkv"
+    vr = VideoReader(infile)
     #import ipdb; ipdb.set_trace()  # XXX BREAKPOINT
 
     height, width = vr.stream.height, vr.stream.width
-    chunksize = 256
+    chunksize = 1024
 
     import numpy as np
     import pipi
     chunk = np.zeros((height, width, 3, chunksize),dtype=np.uint8)
 
-    for i in range(chunksize):
-        chunk[...,i] = vr.read()
+    with pipi.Timer("ff read..."):
+        for i in range(chunksize):
+            chunk[...,i] = vr.read()
 
     print chunk.shape, chunk.min(), chunk.max()
 
-    vw = VideoWriter("/home/swehrwein/gpdata/samford/results/ov.avi", height, width)
+    vw = VideoWriter(os.path.join(out_dir, "ff_ov.avi"), height, width)
 
-    for i in range(chunksize):
-        frame = chunk[...,i]
-        vw.write(frame)
-        #pipi.imwrite(frame, "/home/swehrwein/gpdata/samford/results/ov_%d.png" % i)
+    with pipi.Timer("ff write..."):
+        for i in range(chunksize):
+            frame = chunk[...,i]
+
+            #vw.write((frame*255).astype(np.uint8))
+            vw.write(frame)
+            #pipi.imwrite(frame, base + "results/ff_ov_%d.png" % i)
     vw.close()
-    """
+
+    # test opencv
+    vr = open_read(infile)
+    with pipi.Timer("cv read..."):
+        chunk = read_chunk(vr, chunksize)
+    with pipi.Timer("cv write..."):
+        save_video(os.path.join(out_dir, "cv_ov.mkv"), (chunk * 255).astype(np.uint8))
+    #save_frames(base + "results/cv_ov_%d.png", chunk)
+
