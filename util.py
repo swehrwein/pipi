@@ -20,7 +20,24 @@ def rgb2gray(a):
 
 
 def gray2rgb(a):
-    return skimage.color.gray2rgb(a)
+    result = skimage.color.gray2rgb(a)
+    if result.ndim == 4:
+        return result.transpose((0,1,3,2))
+    elif result.ndim == 3:
+        return result
+    else:
+        print "gray2rgb: a must have 2 or 3 dimensions"
+
+
+def hsv2rgb(a):
+    if a.ndim == 3:
+        return skimage.color.hsv2rgb(a)
+    elif a.ndim == 4:
+        for i in range(a.shape[-1]):
+            a[...,i] = skimage.color.hsv2rgb(a[...,i])
+        return a
+    else:
+        print "hsv2rgb: array should have 3 or 4 dimensions"
 
 
 def imread(fn, gamma=1.0):
@@ -63,6 +80,10 @@ def div_nonz(a,b):
     result = np.zeros_like(a)
     result[b != 0] = anz / bnz
     return result
+
+
+def norm(arr, axis=-1):
+    return np.sqrt(np.sum(arr**2, axis=axis))
 
 
 def bilerp(im, r, c):
