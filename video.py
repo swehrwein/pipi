@@ -1,6 +1,7 @@
-import util
-
 import os
+import util
+import itertools
+
 import cv2
 import numpy as np
 import scipy as sp
@@ -75,7 +76,6 @@ def save_frames(filepattern, video):
         util.imwrite(video[...,i], filepattern % i)
 
 
-
 def resize(vid, scale):
     first = sp.misc.imresize(vid[...,0], scale)
 
@@ -85,37 +85,47 @@ def resize(vid, scale):
         out[...,i] = sp.misc.imresize(vid[...,i], scale)
     return out
 
-""" Good, except for a bug that makes the right few pixels go nuts."""
+
+""" PyAV version. Okay but api wrapping is incomplete, e.g. doesn't give a
+    way to control output bitrate. Something like 2x faster than opencv. """
 import av
 
 
 class VideoReader(object):
-    def __init__(self, filename):
+    def __init__(self, filename, max_frames=None):
         self.container = av.open(filename)
         self.stream = next(s for s in self.container.streams if s.type == b'video')
         self.height = self.stream.height
         self.width = self.stream.width
         self.gen = self._gen()
-
-    def read(self):
-        return next(self)
-
-    def __next__(self):
-        return next(self)
-
-    def next(self):
-        try:
-            return next(self.gen)
-        except StopIteration:
-            return None
+        self.max_frames = max_frames
+        self.current_frame = 0
 
     def _gen(self):
         for packet in self.container.demux(self.stream):
             for frame in packet.decode():
                 yield frame.to_rgb().to_nd_array()
 
-    def close(self):
-        self.container.close()
+    def __iter__(self):
+        return self
+
+    def next(self):
+        self.current_frame += 1
+        if self.max_frames and self.current_frame > self.max_frames:
+            raise StopIteration
+        return next(self.gen)
+
+    def read(self):
+        return next(self)
+
+    def read_chunk(self, frames):
+        chunk = np.zeros((self.height, self.width, 3, frames))
+        i = 0
+        for frame in itertools.islice(self,frames):
+            chunk[...,i] = frame
+            i += 1
+        chunk = chunk[...,:i]
+        return chunk.astype(np.float32) / 255.0
 
 
 class VideoWriter(object):
@@ -132,11 +142,17 @@ class VideoWriter(object):
         if packet:
             self.outfile.mux(packet)
 
+    def write_chunk(self, chunk):
+        if not chunk.dtype == np.uint8:
+            chunk = (chunk * 255.0).astype(np.uint8)
+        for i in range(chunk.shape[-1]):
+            self.write(chunk[...,i])
+
     def close(self):
         self.outfile.close()
 
 
-def test(infile, out_dir):
+def test_av(infile, out_dir):
     #base = "/home/swehrwein/gpdata/samford/"
     #infile = base + "raw/150828_08_00.mkv"
     vr = VideoReader(infile)
@@ -150,12 +166,12 @@ def test(infile, out_dir):
     chunk = np.zeros((height, width, 3, chunksize),dtype=np.uint8)
 
     with pipi.Timer("ff read..."):
-        for i in range(chunksize):
-            chunk[...,i] = vr.read()
+        for i, frame in enumerate(itertools.islice(vr,chunksize)):
+            chunk[...,i] = frame
 
     print chunk.shape, chunk.min(), chunk.max()
 
-    vw = VideoWriter(os.path.join(out_dir, "ff_ov.avi"), height, width)
+    vw = VideoWriter(os.path.join(out_dir, "ff_ov.mkv"), height, width, codec='libx264')
 
     with pipi.Timer("ff write..."):
         for i in range(chunksize):
@@ -166,6 +182,10 @@ def test(infile, out_dir):
             #pipi.imwrite(frame, base + "results/ff_ov_%d.png" % i)
     vw.close()
 
+
+def test_cv(infile, out_dir):
+    import pipi
+    chunksize = 1024
     # test opencv
     vr = open_read(infile)
     with pipi.Timer("cv read..."):
@@ -173,4 +193,32 @@ def test(infile, out_dir):
     with pipi.Timer("cv write..."):
         save_video(os.path.join(out_dir, "cv_ov.mkv"), (chunk * 255).astype(np.uint8))
     #save_frames(base + "results/cv_ov_%d.png", chunk)
+
+
+def test_moviepy(infile, out_dir):
+    import numpy as np
+    import pipi
+    from moviepy.video.io.ffmpeg_reader import FFMPEG_VideoReader
+    from moviepy.video.io.ffmpeg_writer import FFMPEG_VideoWriter
+    chunksize = 128
+
+    vr = FFMPEG_VideoReader(infile)
+    w,h = vr.size
+
+    chunk = np.zeros((h, w, vr.depth, chunksize), dtype=np.uint8)
+    with pipi.Timer("mp read..."):
+        for i in range(chunksize):
+
+            frame = vr.read_frame()
+            chunk[...,i] = frame
+
+    vw = FFMPEG_VideoWriter(os.path.join(out_dir, "mp_ov.mkv"), (w,h), 30, codec="libx264", preset="fast", ffmpeg_params=["-crf", "0"])
+
+    with pipi.Timer("mp write..."):
+        for i in range(chunksize):
+            vw.write_frame(chunk[...,i])
+
+    vr.close()
+    vw.close()
+
 
