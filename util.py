@@ -1,8 +1,10 @@
 import numpy as np
+import scipy as sp
 import skimage as skim
 import skimage.io
 import skimage.color
 import matplotlib.pyplot as plt
+#from moviepy.editor import VideoClip
 
 import sys
 import timeit
@@ -13,10 +15,17 @@ def rgb2gray(a):
     #print a
     if a.ndim == 3:
         return skim.color.rgb2gray(a)
+    elif a.ndim == 4:
+        result = np.zeros((a.shape[:2] + (a.shape[3],)))
+        for i in range(a.shape[-1]):
+            result[...,i] = skim.color.rgb2gray(a[...,i])
+        return result
     elif a.ndim == 1 and a.size == 3:
         return skim.color.rgb2gray(a[np.newaxis, np.newaxis, :])
     elif a.ndim == 2:
         return a
+    else:
+        print "rgb2gray: bad number of dimensions"
 
 
 def gray2rgb(a):
@@ -38,6 +47,19 @@ def hsv2rgb(a):
         return a
     else:
         print "hsv2rgb: array should have 3 or 4 dimensions"
+
+
+def imresize(img, scale, interp=None):
+    if img.dtype == np.uint8:
+        if interp is None:
+            interp = 'bilinear'
+        return sp.misc.imresize(img, scale, interp=interp)
+    else:
+        scales = [scale, scale]
+        if img.ndim == 3:
+            scales.append(1.0)
+
+        return sp.ndimage.interpolation.zoom(img, tuple(scales))
 
 
 def imread(fn, gamma=1.0):
@@ -65,6 +87,24 @@ def imshow(im, colorbar=False, **kwargs):
     skim.io.imshow(im, **kwargs)
     plt.colorbar()
     skim.io.show()
+
+
+"""def implay(array):
+    try:
+        if array.dtype != np.uint8:
+            array = (array*255).astype(np.uint8)
+
+        def make_frame(t):
+            return array[...,round(t*30.0)]
+
+        clip = VideoClip(make_frame, duration=array.shape[-1] / 30.0)
+        clip.preview(fps=30)
+
+        #_ = raw_input("quit...")
+    finally:
+        import pygame.display
+        pygame.display.quit()"""
+
 
 
 def hist(data, *args, **kwargs):
