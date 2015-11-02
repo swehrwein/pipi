@@ -6,6 +6,7 @@ import scipy as sp
 from scipy import ndimage
 
 import util
+from video import VideoReader, VideoWriter
 
 
 def readFlow(fn):
@@ -44,6 +45,91 @@ def flow2hsv(flow, clip=None, clip_pctile=None):
     flow_pad = np.concatenate((flowang[:,:,np.newaxis,...], extra, flowmag[:,:,np.newaxis,...]/clip), axis=2)
     #flow_pad = np.pad(flow, padw, mode='constant', constant_values=clip)
     return util.hsv2rgb(np.clip(flow_pad,0,1))
+
+
+class FlowVideoWriter(VideoWriter):
+    """ lossy! """
+    def __init__(self, filename, height, width, flow_max):
+        VideoWriter.__init__(self, filename, height, width, codec="libx264rgb", crf=0, pix_fmt="bgr24")
+        self.flow_max = flow_max
+        np.savetxt(filename + ".np", np.array([self.flow_max]))
+
+    def write(self, frame):
+        quantframe = np.round(((frame / self.flow_max / 2) + 0.5)*255).astype(np.uint8)
+        flowframe = np.concatenate((quantframe, np.zeros_like(quantframe[:,:,0][:,:,np.newaxis])), axis=2)
+        VideoWriter.write(self, flowframe)
+
+    def write_chunk(self, chunk):
+        for i in range(chunk.shape[-1]):
+            self.write(chunk[...,i])
+
+
+class FlowVisWriter(VideoWriter):
+    def __init__(self, filename, height, width, flow_max):
+        VideoWriter.__init__(self, filename, height, width)
+        self.flow_max = flow_max
+
+    def write(self, frame):
+        frame_vis = flow2hsv(frame, clip=self.flow_max)
+
+        VideoWriter.write(self, frame_vis)
+
+
+
+class FlowVideoReader(VideoReader):
+    def __init__(self, filename, max_frames=None):
+        VideoReader.__init__(self, filename, max_frames)
+        self.flow_max= float(np.loadtxt(filename + ".np"))
+
+    def _gen(self):
+        frame = self.read_frame()
+        while frame is not None:
+            yield ((frame[:,:,:2].astype(np.float32) / 255.0) - 0.5) * 2 * self.flow_max
+            frame = self.read_frame()
+
+
+def flow2vis(flow_vid, flow_vis):
+    fvr = FlowVideoReader(flow_vid)
+    fvw = FlowVisWriter(flow_vis, fvr.height, fvr.width, fvr.flow_max)
+    for frame in fvr:
+        fvw.write(frame)
+    fvw.close()
+
+
+def flo2vid(flo_pattern, flovid_name):
+    import glob
+    flowfiles = sorted(glob.glob(flo_pattern))
+    f1 = readFlow(flowfiles[0])
+    fvw = FlowVideoWriter(flovid_name, f1.shape[0], f1.shape[1], 5.0)
+    for f in flowfiles:
+        fvw.write(readFlow(f))
+    fvw.close()
+
+
+def test_flowio():
+
+    h, w, f = 720, 480, 100
+    flowfield = np.zeros((h,w,3,f))
+    for i in range(100):
+        flowfield[4*i:4*i+10,4*i:4*i+10,0,i] = 10.0 + i/20.0
+        flowfield[4*i:4*i+10,4*i:4*i+10,1,i] = 5.0 + i/10.0
+
+    fvw = FlowVideoWriter("/home/swehrwein/gpdata/flowvidtest.mkv", h, w, flowfield.max())
+    for i in range(f):
+        fvw.write(flowfield[...,:2,i])
+    fvw.close()
+
+    fvr = FlowVideoReader("/home/swehrwein/gpdata/flowvidtest.mkv")
+    myflowfield = np.zeros((h,w,3,f))
+    for i in range(f):
+        myflowfield[...,:2,i] = fvr.next()
+
+    diff = myflowfield - flowfield
+    print np.max(diff), np.max(flowfield)
+    vis = np.concatenate((flowfield, myflowfield), axis=1)
+    vis = vis / np.max(vis)
+    util.implay(vis)
+
 
 """ likely broken
 def lk_flow(im1, im2):
