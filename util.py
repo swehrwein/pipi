@@ -4,7 +4,7 @@ import skimage as skim
 import skimage.io
 import skimage.color
 import matplotlib.pyplot as plt
-#from moviepy.editor import VideoClip
+from moviepy.editor import VideoClip
 
 import sys
 import timeit
@@ -89,7 +89,7 @@ def imshow(im, colorbar=False, **kwargs):
     skim.io.show()
 
 
-"""def implay(array):
+def implay(array):
     try:
         if array.dtype != np.uint8:
             array = (array*255).astype(np.uint8)
@@ -103,7 +103,7 @@ def imshow(im, colorbar=False, **kwargs):
         #_ = raw_input("quit...")
     finally:
         import pygame.display
-        pygame.display.quit()"""
+        pygame.display.quit()
 
 
 
@@ -208,7 +208,18 @@ def enu2azel(e,n,u):
 
 
 class Opt(object):
-    pass
+    def __init__(self, **args):
+        self.update(**args)
+
+    def __str__(self):
+        return '\n'.join("%s: %s" % (k,v) for (k,v) in vars(self).iteritems())
+
+    def update(self, **args):
+        self.__dict__.update(args)
+
+    def asdict(self):
+        return vars(self)
+
 
 
 class Timer(object):

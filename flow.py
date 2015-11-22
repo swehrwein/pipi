@@ -74,18 +74,33 @@ class FlowVisWriter(VideoWriter):
 
         VideoWriter.write(self, frame_vis)
 
+    def write_chunk(self, chunk):
+        for i in range(chunk.shape[-1]):
+            self.write(chunk[...,i])
 
 
 class FlowVideoReader(VideoReader):
     def __init__(self, filename, max_frames=None):
         VideoReader.__init__(self, filename, max_frames)
-        self.flow_max= float(np.loadtxt(filename + ".np"))
+        self.flow_max = float(np.loadtxt(filename + ".np"))
 
     def _gen(self):
         frame = self.read_frame()
         while frame is not None:
             yield ((frame[:,:,:2].astype(np.float32) / 255.0) - 0.5) * 2 * self.flow_max
             frame = self.read_frame()
+
+
+def save_flow_video(filename, flow_vid, max_flow=5.0):
+    fvw = FlowVideoWriter(filename, flow_vid.shape[0], flow_vid.shape[1], max_flow)
+    fvw.write_chunk(flow_vid)
+    fvw.close()
+
+
+def save_flow_vis(filename, flow_vid, max_flow=5.0):
+    fvw = FlowVisWriter(filename, flow_vid.shape[0], flow_vid.shape[1], max_flow)
+    fvw.write_chunk(flow_vid)
+    fvw.close()
 
 
 def flow2vis(flow_vid, flow_vis):

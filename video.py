@@ -62,7 +62,7 @@ def read_chunk(videoreader, nframes, scale=None):
 
 def save_video(filename, video):
     vw = VideoWriter(filename, *(video.shape[:2]))
-    vw.write_chunk(vw, video)
+    vw.write_chunk(video)
     vw.close()
 
 
@@ -81,7 +81,6 @@ def resize(vid, scale, interp='bilinear'):
     return out
 
 
-import av
 """Classes to wrap MoviePy's pipe-based reader and writers."""
 
 from moviepy.video.io.ffmpeg_reader import FFMPEG_VideoReader
@@ -89,17 +88,20 @@ from moviepy.video.io.ffmpeg_writer import FFMPEG_VideoWriter
 
 
 class VideoReader(FFMPEG_VideoReader):
-    def __init__(self, filename, max_frames=None, starttime=0, duration=None, asfloat=True):
+    def __init__(self, filename, max_frames=None, starttime=0, duration=None, asfloat=True, scale=None):
         FFMPEG_VideoReader.__init__(self, filename, check_duration=True,
                                     starttime=starttime, duration=duration)
         self.width, self.height = self.size
         self.gen = self._gen()
         self.max_frames = max_frames
         self.asfloat = asfloat
+        self.scale = scale
 
     def _gen(self):
         frame = self.read_frame()
         while frame is not None:
+            if self.scale is not None:
+                frame = util.imresize(frame, self.scale)
             yield (frame.astype(np.float32) / 255.0) if self.asfloat else frame
             frame = self.read_frame()
 
