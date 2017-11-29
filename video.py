@@ -1,6 +1,7 @@
 import os
-import util
 import itertools
+
+import util
 
 import cv2
 import numpy as np
@@ -61,9 +62,15 @@ def read_chunk(videoreader, nframes, scale=None):
 
 
 def save_video(filename, video):
+    if video.ndim == 3:
+        video = util.gray2rgb(video)
     vw = VideoWriter(filename, *(video.shape[:2]))
     vw.write_chunk(video)
     vw.close()
+
+
+def load_video(filename):
+    vr = VideoReader(filename)
 
 
 def save_frames(filepattern, video):
@@ -71,14 +78,27 @@ def save_frames(filepattern, video):
         util.imwrite(video[...,i], filepattern % i)
 
 
-def resize(vid, scale, interp='bilinear'):
+def resize(vid, scale):
+    if vid.ndim == 3:
+        h, w, f = vid.shape
+    else:
+        h, w, c, f = vid.shape
+    newh = int(h*scale)
+    neww = int(w*scale)
+
+    out = np.zeros((newh, neww,) + tuple(vid.shape[2:]), dtype=vid.dtype)
+    for i in range(f):
+        out[...,i] = cv2.resize(vid[...,i], (neww, newh))
+    return out
+
+"""def resize(vid, scale, interp='bilinear'):
     first = util.imresize(vid[...,0], scale)
 
     out = np.zeros(first.shape + (vid.shape[-1],), dtype=vid.dtype)
     out[...,0] = first
     for i in range(1, vid.shape[-1]):
         out[...,i] = util.imresize(vid[...,i], scale, interp=interp)
-    return out
+    return out"""
 
 
 """Classes to wrap MoviePy's pipe-based reader and writers."""

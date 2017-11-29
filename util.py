@@ -4,15 +4,21 @@ import skimage as skim
 import skimage.io
 import skimage.color
 import matplotlib.pyplot as plt
-from moviepy.editor import VideoClip
+#from moviepy.editor import VideoClip
 
+import os
 import sys
+import errno
 import timeit
 import warnings
 
 
 def rgb2gray(a):
-    #print a
+    """ Accepts a of 1, 2, 3, or 4 dimensions.
+        1d takes size (3,) and returns a scalar
+        2d returns a unchanged
+        3d (w,h,c) returns 2d gray image (w,h)
+        4d (w,h,c,f) returns 3d gray video (w,h,f) """
     if a.ndim == 3:
         return skim.color.rgb2gray(a)
     elif a.ndim == 4:
@@ -38,6 +44,17 @@ def gray2rgb(a):
         print "gray2rgb: a must have 2 or 3 dimensions"
 
 
+def rgb2hsv(a):
+    if a.ndim == 3:
+        return skimage.color.rgb2hsv(a)
+    elif a.ndim == 4:
+        for i in range(a.shape[-1]):
+            a[...,i] = skimage.color.hsv2rgb(a[...,i])
+        return a
+    else:
+        print "rgb2hsv: array should have 3 or 4 dimensions"
+
+
 def hsv2rgb(a):
     if a.ndim == 3:
         return skimage.color.hsv2rgb(a)
@@ -59,15 +76,23 @@ def imresize(img, scale, interp=None):
         if img.ndim == 3:
             scales.append(1.0)
 
-        return sp.ndimage.interpolation.zoom(img, tuple(scales))
+        if interp == 'nearest':
+            return sp.ndimage.interpolation.zoom(img, tuple(scales), order=0)
+        else:
+            return sp.ndimage.interpolation.zoom(img, tuple(scales))
 
 
-def imread(fn, gamma=1.0):
+def imread(fn, gamma=1.0, asbyte=False):
+    """ note that gamma and asbyte are mutually incomptabible """
     if fn[-3:] == 'exr':
         im = skim.io.imread(fn, plugin='openexr')
         return np.power(im / np.max(im), gamma)
     else:
-        return np.power(skim.img_as_float(skim.io.imread(fn)), gamma)
+        im = skim.io.imread(fn)
+        if asbyte:
+            return im
+        else:
+            return np.power(skim.img_as_float(im), gamma)
 
 
 def imwrite(im, fn, dtype=np.float16):
@@ -89,21 +114,24 @@ def imshow(im, colorbar=False, **kwargs):
     skim.io.show()
 
 
-def implay(array):
-    try:
-        if array.dtype != np.uint8:
-            array = (array*255).astype(np.uint8)
+def blobshow(blob, colorbar=False, **kwargs):
+    imshow(blob.transpose((1,2,0)), colorbar, **kwargs)
 
-        def make_frame(t):
-            return array[...,round(t*30.0)]
+#ef implay(array):
+#   try:
+#       if array.dtype != np.uint8:
+#           array = (array*255).astype(np.uint8)
 
-        clip = VideoClip(make_frame, duration=array.shape[-1] / 30.0)
-        clip.preview(fps=30)
+#       def make_frame(t):
+#           return array[...,round(t*30.0)]
 
-        #_ = raw_input("quit...")
-    finally:
-        import pygame.display
-        pygame.display.quit()
+#       clip = VideoClip(make_frame, duration=array.shape[-1] / 30.0)
+#       clip.preview(fps=30)
+
+#       #_ = raw_input("quit...")
+#   finally:
+#       import pygame.display
+#       pygame.display.quit()
 
 
 
@@ -183,6 +211,13 @@ def unstuff(a, mask):
     elif a.ndim == 2:
         return a[mask]
 
+def ensure_dir(directory):
+    try:
+        os.makedirs(directory)
+    except OSError as e:
+        if e.errno != errno.EEXIST:
+            raise
+
 
 def stuff(a, mask):
     if a.ndim == 1:
@@ -229,7 +264,7 @@ class Timer(object):
 
     def __enter__(self):
         if self.printout:
-            print self.msg,
+            print "Start", self.msg
             sys.stdout.flush()
         self.start = timeit.default_timer()
         return self
@@ -238,5 +273,5 @@ class Timer(object):
         self.end = timeit.default_timer()
         self.elapsed = self.end - self.start
         if self.printout:
-            print '%.2f' % self.elapsed
+            print "End %s. Elapsed time: %.2f" % (self.msg, self.elapsed)
             sys.stdout.flush()
