@@ -20,13 +20,13 @@ def readFlow(fn):
         if 202021.25 != magic:
             print 'Magic number incorrect. Invalid .flo file'
             return None
-        else:
-            w = np.fromfile(f, np.int32, count=1)
-            h = np.fromfile(f, np.int32, count=1)
-            #print 'Reading %d x %d flo file' % (w, h)
-            data = np.fromfile(f, np.float32, count=2*w*h)
-            # Reshape data into 3D array (columns, rows, bands)
-            return np.resize(data, (h, w, 2))
+
+        dims = np.fromfile(f, np.int32, count=2)
+        w, h = dims[0], dims[1]
+        #print 'Reading %d x %d flo file' % (w, h)
+        data = np.fromfile(f, np.float32, count=2*w*h)
+        # Reshape data into 3D array (columns, rows, bands)
+        return np.reshape(data, (h, w, 2))
 
 
 def flow2hsv(flow, clip=None, clip_pctile=None):
