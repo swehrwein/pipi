@@ -8,59 +8,6 @@ import numpy as np
 import scipy as sp
 
 
-def open_read(fn):
-    """Open cv2.VideoCapture.
-        open_read(filename)
-    """
-    vr = cv2.VideoCapture(fn)
-    assert(vr.isOpened())
-    return vr
-
-
-def open_write(fn, h, w):
-    """Open cv2.VideoWriter.
-        open_write(filename, height, width)
-        Uses HFYU codec, 30fps
-    """
-    #fourcc = cv2.VideoWriter_fourcc(*"HFYU")
-    fourcc = cv2.cv.CV_FOURCC(*"HFYU")
-    # TODO automate level numbering
-    outvid = cv2.VideoWriter(fn, fourcc, 30, (w,h))
-    assert(outvid.isOpened())
-    return outvid
-
-
-def get_size(vr):
-    h = int(vr.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
-    w = int(vr.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH))
-    c = 3  # let's just assume this for now, shall we?
-    return h, w, c
-
-
-def read_chunk(videoreader, nframes, scale=None):
-    h, w, c = get_size(videoreader)
-    #h,w = videoreader.height, videoreader.width
-    chunk = None
-    for i in range(nframes):
-        isframe, frame = videoreader.read()
-
-        if not isframe:
-            if chunk is None:
-                return None
-            else:
-                chunk = chunk[...,:i]
-                break
-
-        if scale is not None:
-            frame = sp.misc.imresize(frame, scale)
-
-        if chunk is None:
-            chunk = np.zeros(frame.shape + (nframes,), dtype=np.uint8)
-
-        chunk[...,i] = frame
-    return chunk.astype(np.float32)[...,::-1,:] / 255.0
-
-
 def save_video(filename, video):
     if video.ndim == 3:
         video = util.gray2rgb(video)
@@ -211,18 +158,6 @@ def test_videoio(infile, out_dir):
         vw.write_chunk(chunk)
             #pipi.imwrite(frame, base + "results/ff_ov_%d.png" % i)
     vw.close()
-
-
-def test_cv(infile, out_dir):
-    import pipi
-    chunksize = 1024
-    # test opencv
-    vr = open_read(infile)
-    with pipi.Timer("cv read..."):
-        chunk = read_chunk(vr, chunksize)
-    with pipi.Timer("cv write..."):
-        save_video(os.path.join(out_dir, "cv_ov.mkv"), (chunk * 255).astype(np.uint8))
-    #save_frames(base + "results/cv_ov_%d.png", chunk)
 
 
 def test_moviepy(infile, out_dir):
